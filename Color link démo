@@ -1,0 +1,614 @@
+
+--# Main
+function setup()
+    -- fochier
+    -- lecture du fichier source
+    if true then
+        a = asset.texte_txt
+        chemin_fichier = a.path -- chemin
+        a = io.open(chemin_fichier, "rb") -- lecture en bute
+        data = a:read("*a")
+        -- meta donnees
+        nom_fichier = chemin_fichier:match("^.+/(.+)$")
+        extension_fichier = nom_fichier:match("%.([^.]+)$")
+        taille = #data
+        extension = "html"
+        frame_id = 1
+        total_frames = 0
+        checksum = 150
+        a:close() -- fermeture
+    end
+    liste_extension = {
+        ["png"] = 1,
+        ["jpg"] = 2,
+        ["html"] = 3,
+        ["txt"] = 4,
+        ["zip"] = 5
+    }
+    
+    -- cotes emmeteur 
+    -- tout les types de donnes
+    octets_emi = {}
+    bits_emi = {}
+    couleurs_emi = {}
+    -- remplissage de toutes les listes avec leur donnees
+    -- octets
+    for i = 1, #data do
+        octets_emi[i] = string.byte(data, i)
+    end
+    -- bytes
+    for i = 1, #octets_emi do
+        bits_emi[i] = octet_bit(octets_emi[i], 9)
+    end
+    -- couleurs
+    local j = 1
+    for i = 1, #bits_emi do
+        couleurs_emi[j] = bit_couleur(tonumber(string.sub(bits_emi[i],1, 3)))
+        couleurs_emi[j+1] = bit_couleur(tonumber(string.sub(bits_emi[i],4, 6)))
+        couleurs_emi[j+2] = bit_couleur(tonumber(string.sub(bits_emi[i],7, 9)))
+        j = j + 3
+    end
+    --print(#couleurs_emi)
+    -- cotes recepteur
+    bits_recu = {}
+    octets_recu = {}
+    -- couleur
+    couleurs_recu = couleurs_emi
+    local j = 1
+    -- bits
+    for i = 1, #couleurs_recu / 3 do
+        bits_recu[i] = couleur_bit(couleurs_recu[j]) .. couleur_bit(couleurs_recu[j + 1]) .. couleur_bit(couleurs_recu[j + 2])
+        j = j + 3
+    end
+    -- octets
+    for i = 1, #bits_recu do
+        octets_recu[i] = bit_octet(bits_recu[i])
+    end
+    
+    -- unite graphique
+    unite = 19
+    grandeur_mod = WIDTH/ unite + 1
+    --
+    -- initialisation des liste de modules graphique
+    liste_module_data = {}
+    liste_module_correction = {}
+    liste_module_meta = {}
+    -- meta donnees
+    liste_couleur_meta = {}
+    bit_meta = ""
+    total_frames = math.floor(tostring(#couleurs_emi/180))
+    -- couleurs
+    
+    local j = 1
+    for i = 1, #bits_emi do
+        couleurs_emi[j] = bit_couleur(tonumber(string.sub(bits_emi[i],1, 3)))
+        couleurs_emi[j+1] = bit_couleur(tonumber(string.sub(bits_emi[i],4, 6)))
+        couleurs_emi[j+2] = bit_couleur(tonumber(string.sub(bits_emi[i],7, 9)))
+        j = j + 3
+    end
+    -- cree tout les modules dans la table
+    remplir_module_liste()
+    for i = 1, #liste_couleur_meta do
+        print(liste_couleur_meta[i])
+    end
+end   
+
+r = 1
+v = 1
+b = 1
+copie = true
+jj = 0
+secondes = 0
+kk = 0
+function draw()
+    background(0)
+    if copie then
+        -- fond grille
+        local x, y = posNormal(0, 0)
+        fill(4)
+        rect(x, y, WIDTH, WIDTH)
+        
+        rectMode(CENTER)
+        -- paterne calibrage
+        fill(0)
+        paterneCalibrage()
+        -- parerne redondance
+        paternRedondance()
+        -- paterne des meta data
+        
+        -- dessine tout les modules et leus couleur
+        dessinModule()
+        -- mise a jour des module data
+        for i = 1, 180 do
+            liste_module_data[i].couleur = couleurs_recu[jj +i]
+        end
+        -- mise a jour des modules meta
+        bit_meta = octet_bit(taille, 20) .. octet_bit(liste_extension[extension], 12) .. octet_bit(frame_id, 11) .. octet_bit(total_frames, 11) .. octet_bit(checksum, 12)
+        print(bit_meta)
+        j = 1
+        for i = 1, 22 do
+            liste_couleur_meta[i] = bit_couleur(tonumber(string.sub(bit_meta,j, j + 2)))
+            j = j + 3
+        end
+        for i = 1, 22 do
+            liste_module_meta[i].couleur = liste_couleur_meta[i]
+        end
+        
+        if jj <= #couleurs_recu then
+            jj = jj + 180
+            kk = kk + 1
+            frame_id = math.floor(tostring(jj/180))
+        else
+            animation_cl()
+        end
+        if kk > 60 then
+            kk = 0
+            secondes = secondes + 1
+        end
+        
+        -- affichage des infos
+        print("frame", jj/180)
+        print(jj, "/", #couleurs_emi)
+        fill(255)
+        text(jj .. "/" .. #couleurs_emi .. " Octets", WIDTH/2, HEIGHT/2 + 300)
+        text(math.floor(tostring(jj/180)) .. "/" .. math.floor(tostring(#couleurs_emi/180)) .. " Frame", WIDTH/2, HEIGHT/2 + 270)
+        text(secondes .. " Secondes", WIDTH/2, HEIGHT/2 + 240)
+        -- grilles
+        --grille()
+        --animation_cl()
+    end
+    print(WIDTH, HEIGHT)
+    end
+
+--# Autre
+
+--# Visuel 
+function grille()
+    -- dessine les grilles
+    for x = 0, WIDTH, WIDTH/unite do
+        for y = HEIGHT/2 - WIDTH/2, HEIGHT/2 + WIDTH/2, WIDTH/unite do
+            stroke(255)
+            strokeWidth(1)
+            line(x, HEIGHT/2 - WIDTH/2, x, HEIGHT/2 + WIDTH/2)
+            line(0, y, WIDTH, y)
+        end
+    end
+end
+function posNormal(x, y)
+    -- permet de convertire notre position normalisé de position basique
+    local x, y = (x* WIDTH/unite) + WIDTH/2, (y * WIDTH/unite) + HEIGHT/2
+    return x, y
+end
+function remplir_module_liste()
+    function modo(sx, min, max, sens)
+        if sens == 1 then
+            for i = min, max do
+                table.insert(liste_module_data, {x = sx, y = i, couleur = "rouge"})
+            end
+        elseif sens == -1 then
+            for i = max, min, -1 do
+                table.insert(liste_module_data, {x = sx, y = i, couleur = "rouge"})
+            end
+        end
+        
+    end
+    local ss = 1
+    local sx = -9
+    --
+    for i = 1, 5 do
+        modo(sx, -9, 0, ss)
+        ss = ss * -1
+        sx = sx + 1
+    end
+    --
+    modo(-4, -9, -5, -1)
+    modo(-3, -9, -5, 1)
+    local ss = -1
+    local sx = -1
+    for i = 1, 6 do
+        modo(sx, -9, -5, ss)
+        ss = ss * -1
+        sx = sx + 1
+    end
+    local ss = -1
+    local sx = 0
+    for i = 1, 5 do
+        modo(sx, 5, 9, ss)
+        ss = ss * -1
+        sx = sx + 1
+    end
+    modo(5, -4, 1, 1)
+    modo(5, 3, 9, 1)
+    modo(6, 3, 9, -1)
+    modo(6, -4, 1, -1)
+    modo(7, -4, 1, 1)
+    modo(7, 3, 9, 1)
+    modo(8, 3, 9, -1)
+    modo(8, -4, 1, -1)
+    modo(9, -4, 1, 1)
+    modo(9, 3, 9, 1)
+    function modo2(sx, min, max, sens)
+        if sens == 1 then
+            for i = min, max do
+                table.insert(liste_module_correction, {x = sx, y = i, couleur = "magenta"})
+            end
+        elseif sens == -1 then
+            for i = max, min, -1 do
+                table.insert(liste_module_correction, {x = sx, y = i, couleur = "magenta"})
+            end
+        end
+        
+    end
+    modo2(-4, -4, -1, 1)
+    modo2(-3, -4, -3, -1)
+    modo2(1, 4, 4, 1)
+    modo2(2, 4, 4, -1)
+    modo2(3, 3, 4, 1)
+    modo2(4, 3, 4, -1)
+    function modo3(sx, min, max, sens)
+        if sens == 1 then
+            for i = min, max do
+                table.insert(liste_module_meta, {x = sx, y = i, couleur = "bleu"})
+            end
+        elseif sens == -1 then
+            for i = max, min, -1 do
+                table.insert(liste_module_meta, {x = sx, y = i, couleur = "bleu"})
+            end
+        end
+        
+    end
+    local ss = 1
+    local sx = 5
+    for i = 1, 5 do
+        modo3(sx, -9, -5, ss)
+        sx = sx + 1
+        ss = ss * -1
+    end
+end
+function dessinModule()
+    -- module data
+    for i = 1, #liste_module_data do
+        coul = liste_module_data[i].couleur
+        -- definition des couleurs de chaque module
+        if coul == "noir" then
+            fill(0,0,0)
+        elseif coul == "blanc" then
+            fill(255, 255, 255)
+        elseif coul == "rouge" then
+            fill(255, 0, 0)
+        elseif coul == "vert" then
+            fill(0, 255, 0)
+        elseif coul == "bleu" then
+            fill(0, 0, 255)
+        elseif coul == "jaune" then
+            fill(255, 255, 0)
+        elseif coul == "magenta" then
+            fill(255, 0, 255)
+        elseif coul == "cyan" then
+            fill(0, 255, 255)
+        end
+        --
+        local x, y = posNormal(liste_module_data[i].x, liste_module_data[i].y)
+        ellipse(x, y, grandeur_mod)
+    end
+    -- module correction
+    noFill()
+    for i = 1, #liste_module_correction do
+        coul = liste_module_correction[i].couleur
+        -- definition des couleurs de chaque module
+        if coul == "noir" then
+            fill(0,0,0)
+        elseif coul == "blanc" then
+            fill(255, 255, 255)
+        elseif coul == "rouge" then
+            fill(255, 0, 0)
+        elseif coul == "vert" then
+            fill(0, 255, 0)
+        elseif coul == "bleu" then
+            fill(0, 0, 255)
+        elseif coul == "jaune" then
+            fill(255, 255, 0)
+        elseif coul == "magenta" then
+            fill(255, 0, 255)
+        elseif coul == "cyan" then
+            fill(0, 255, 255)
+        end
+        --
+        local x, y = posNormal(liste_module_correction[i].x, liste_module_correction[i].y)
+        ellipse(x, y, grandeur_mod)
+    end
+    -- module de meta data
+    noFill()
+    for i = 1, #liste_module_meta do
+        coul = liste_module_meta[i].couleur
+        -- definition des couleurs de chaque module
+        if coul == "noir" then
+            fill(0,0,0)
+        elseif coul == "blanc" then
+            fill(255, 255, 255)
+        elseif coul == "rouge" then
+            fill(255, 0, 0)
+        elseif coul == "vert" then
+            fill(0, 255, 0)
+        elseif coul == "bleu" then
+            fill(0, 0, 255)
+        elseif coul == "jaune" then
+            fill(255, 255, 0)
+        elseif coul == "magenta" then
+            fill(255, 0, 255)
+        elseif coul == "cyan" then
+            fill(0, 255, 255)
+        end
+        --
+        local x, y = posNormal(liste_module_meta[i].x, liste_module_meta[i].y)
+        ellipse(x, y, grandeur_mod)
+    end
+end
+function paterneCalibrage()
+    -- dessine le paterne de calibrage avec toutes les couleurs utilisables
+    for i = -9, -2, 1 do
+        for j = 2, 9, 1 do
+            local x, y = posNormal(i, j)
+            ellipse(x, y, grandeur_mod)
+        end
+    end
+    for i = -3, -1, 1 do
+        for j = 1, 3, 1 do
+            local x, y = posNormal(i, j)
+            ellipse(x, y, grandeur_mod)
+        end
+    end
+    for i = -2, 1, 1 do
+        for j = -1, 2, 1 do
+            local x, y = posNormal(i, j)
+            ellipse(x, y, grandeur_mod)
+        end
+    end
+    for i = -1, 3, 1 do
+        for j = -3, 1, 1 do
+            local x, y = posNormal(i, j)
+            ellipse(x, y, grandeur_mod)
+        end
+    end
+    fill(0, 255, 0)
+    for i = -8, -8, 1 do
+        for j = 5, 8, 1 do
+            local x, y = posNormal(i, j)
+            ellipse(x, y, grandeur_mod)
+        end
+    end
+    for i = -8, -5, 1 do
+        for j = 8, 8, 1 do
+            local x, y = posNormal(i, j)
+            ellipse(x, y, grandeur_mod)
+        end
+    end
+    fill(255, 0, 0)
+    for i = -6, -6, 1 do
+        for j = 4, 6, 1 do
+            local x, y = posNormal(i, j)
+            ellipse(x, y, grandeur_mod)
+        end
+    end
+    for i = -6, -4, 1 do
+        for j = 6, 6, 1 do
+            local x, y = posNormal(i, j)
+            ellipse(x, y, grandeur_mod)
+        end
+    end
+    fill(0, 0, 255)
+    for i = -4, -4, 1 do
+        for j = 3, 4, 1 do
+            local x, y = posNormal(i, j)
+            ellipse(x, y, grandeur_mod)
+        end
+    end
+    for i = -4, -3, 1 do
+        for j = 4, 4, 1 do
+            local x, y = posNormal(i, j)
+            ellipse(x, y, grandeur_mod)
+        end
+    end
+    fill(255, 0, 255)
+    local x, y = posNormal(-2, 2)
+    ellipse(x, y, grandeur_mod)
+    fill(255, 255, 0)
+    for i = -1, 0, 1 do
+        for j = 0, 0, 1 do
+            local x, y = posNormal(i, j)
+            ellipse(x, y, grandeur_mod)
+        end
+    end
+    for i = 0, 0, 1 do
+        for j = 0, 1, 1 do
+            local x, y = posNormal(i, j)
+            ellipse(x, y, grandeur_mod)
+        end
+    end
+    fill(0, 255, 255)
+    for i = 0, 2, 1 do
+        for j = -2, -2, 1 do
+            local x, y = posNormal(i, j)
+            ellipse(x, y, grandeur_mod)
+        end
+    end
+    for i = 2, 2, 1 do
+        for j = -2, 0, 1 do
+            local x, y = posNormal(i, j)
+            ellipse(x, y, grandeur_mod)
+        end
+    end
+end
+function paternRedondance()
+    -- motifs repeté pour faciliter le reperzge de la camera
+    fill(0)
+    for i = -2, -2, 1 do
+        for j = -9, -5, 1 do
+            local x, y = posNormal(i, j)
+            ellipse(x, y, grandeur_mod)
+        end
+    end
+    fill(255)
+    local x, y = posNormal(-2, -8)
+    ellipse(x, y, grandeur_mod)
+    local x, y = posNormal(-2, -6)
+    ellipse(x, y, grandeur_mod)
+    --
+    fill(0)
+    for i = 5, 9, 1 do
+        for j = 2, 2, 1 do
+            local x, y = posNormal(i, j)
+            ellipse(x, y, grandeur_mod)
+        end
+    end
+    fill(255)
+    local x, y = posNormal(8, 2)
+    ellipse(x, y, grandeur_mod)
+    local x, y = posNormal(6, 2)
+    ellipse(x, y, grandeur_mod)
+end
+function animation_cl()
+        liste_module_data[r].couleur = "blanc"
+        if r > 1 then
+            liste_module_data[r-1].couleur = "rouge"
+        end
+        if r < #liste_module_data then
+            r = r + 1
+        else 
+            liste_module_data[#liste_module_data].couleur = "rouge"
+            r = 1
+        end
+        --
+        liste_module_correction[v].couleur = "cyan"
+        if v > 1 then
+            liste_module_correction[v-1].couleur = "magenta"
+        end
+        if v < #liste_module_correction then
+            v = v + 1
+        else
+            liste_module_correction[#liste_module_correction].couleur = "magenta"
+            v = 1
+        end
+        --
+        
+        liste_module_meta[b].couleur = "jaune"
+        if b > 1 then
+            liste_module_meta[b-1].couleur = "bleu"
+        end
+        if b < #liste_module_meta then
+            b = b + 1
+        else
+            liste_module_meta[#liste_module_meta].couleur = "bleu"
+            b = 1
+        end
+    end
+--# Binaire 
+-- fonctions de convertions
+function octet_bit(octet, nbrBits)
+    -- convertir les octets en bits
+    local nbr = octet
+    local bt = ""
+    while nbr / 2 > 0 do
+        bt = bt .. tostring(nbr - (math.floor(nbr /2 )*2))
+        nbr = math.floor(nbr /2 )
+    end
+    bt = bt .. string.rep(tostring(0), nbrBits - #bt)
+    return  string.reverse(bt)
+end
+
+function bit_octet(bit)
+    -- convertir les bits en octets
+    local bits = string.reverse(tostring(bit))
+    local octet = 0
+    local v = 1
+    local longeur = #tostring(bit)
+    for i = 1, longeur do
+        octet = octet + (tonumber(string.sub(bits, i, i))) * v
+        v = v * 2
+    end
+    return octet
+end
+
+function bit_couleur(bit)
+    -- convertir les bits en couleurs
+    -- 3 bits seulement
+    local couleur = ""
+    local bit = bit
+    if bit == 000 then
+        -- noir
+        couleur = "noir"
+    elseif bit == 001 then
+        -- bleu
+        couleur = "bleu"
+    elseif bit == 010 then
+        -- vert
+        couleur = "vert"
+    elseif bit == 011 then
+        -- cyan
+        couleur = "cyan"
+    elseif bit == 100 then
+        -- rouge
+        couleur = "rouge"
+    elseif bit == 101 then
+        -- magenta
+        couleur = "magenta"
+    elseif bit == 110 then
+        -- jaune
+        couleur = "jaune"
+    elseif bit == 111 then
+        -- blanc
+        couleur = "blanc"
+    end
+    return couleur
+end
+
+function couleur_bit(couleur)
+    -- convertir les couleurs en bits
+    local bit = ""
+    local couleur = couleur
+    if couleur == "noir" then
+        -- noir
+        bit = octet_bit(0, 3)
+    elseif couleur == "bleu" then
+        -- bleu
+        bit = octet_bit(1, 3)
+    elseif couleur == "vert" then
+        -- vert
+        bit = octet_bit(2, 3)
+    elseif couleur == "cyan" then
+        -- cyan
+        bit = octet_bit(3, 3)
+    elseif couleur == "rouge" then
+        -- rouge
+        bit = octet_bit(4, 3)
+    elseif couleur == "magenta" then
+        -- magenta
+        bit = octet_bit(5, 3)
+    elseif couleur == "jaune" then
+        -- jaune
+        bit = octet_bit(6, 3)
+    elseif couleur == "blanc" then
+        -- blanc
+        bit = octet_bit(7, 3)
+    end
+    return bit
+end
+
+-- dupliquer le fichier source a partire des donnes recues
+function creerFichier(liste_octets, nom) 
+    -- temponne tout les octets dans un tempon
+    if copiee then return end
+    print("copie en cours ..")
+    local octets_tempon = ""
+    for i = 1, #liste_octets do
+        octets_tempon = octets_tempon .. string.char(liste_octets[i])
+    end
+    -- ecriture du fichier
+    local chemin = asset.path
+    local fichier = io.open(chemin .. "/" .. nom, "wb")
+    fichier:write(octets_tempon)
+    -- operation terminée
+    fichier:close()
+    copiee = true
+    print("le fichier" .. " " .. nom .. " a été créé avec succès !")
+end
